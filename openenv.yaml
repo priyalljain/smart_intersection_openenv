@@ -1,0 +1,11 @@
+name: traffic_control_env
+version: 1.0.0
+description: >
+  Autonomous traffic control for a 4-way intersection with emergency vehicle
+  prioritization, crash handling, flooding, pedestrians, and multi-event resolution.
+tasks:
+  - easy
+  - medium
+  - hard
+environment:
+  class: my_env.env.TrafficControlEnv
