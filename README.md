@@ -35,16 +35,15 @@ In many cities, emergency vehicles (ambulances, fire trucks) get stuck in traffi
 
 | Task   | Description | Challenges |
 |--------|-------------|------------|
-| easy   | Normal vehicles only | Basic queue management, avoid thrashing, keep all lanes moving. |
-| medium | Adds emergency vehicles (ambulance, fire) | Must detect and prioritise emergencies while maintaining reasonable queues. |
-| hard   | Adds floods, crashes, and multiple emergencies | Simultaneous events, all-red phases, lane blockages, fairness penalties. |
+| **easy** | Normal vehicles only | Basic queue management, avoid thrashing, keep all lanes moving. |
+| **medium** | Adds emergency vehicles (ambulance, fire) | Must detect and prioritise emergencies while maintaining reasonable queues. |
+| **hard** | Adds floods, crashes, and multiple emergencies | Simultaneous events, all-red phases, lane blockages, fairness penalties. |
 
 ---
 
 ## Action Space
 
 The agent selects one of two phases:
-
 - `ns` – Green for North and South, red for East and West.
 - `ew` – Green for East and West, red for North and South.
 
@@ -53,7 +52,6 @@ The agent selects one of two phases:
 ## Observation Space
 
 The observation (Pydantic `TrafficObservation`) includes:
-
 - `time` – current episode time (seconds)
 - `phase` – current phase (`ns`, `ew`, or `all_red`)
 - `time_in_phase` – seconds since last phase change
@@ -71,16 +69,17 @@ The observation (Pydantic `TrafficObservation`) includes:
 ## Reward Function
 
 The reward is a weighted combination of four sub-scores, normalised to [0, 1]:
-reward = (safety_score*0.30 + emergency_score*0.35 + efficiency_score*0.20 + equity_score*0.15) / 1000
 
-text
+```text
+reward = (safety_score*0.30 + emergency_score*0.35 + efficiency_score*0.20 + equity_score*0.15) / 1000
+```
 
 | Component | Weight | Penalties (examples) |
 |-----------|--------|----------------------|
-| Safety    | 30%    | Crash (-500), min-green violation (-10), thrashing (-20) |
-| Emergency | 35%    | Emergency wait time: >30s -> -100, >60s -> -300 |
-| Efficiency| 20%    | Queue length (-15 per vehicle), wasted green (-5 per second) |
-| Equity    | 15%    | Pedestrian wait > max allowed (-50), queue imbalance (up to -200) |
+| **Safety** | 30%    | Crash (-500), min-green violation (-10), thrashing (-20) |
+| **Emergency** | 35%    | Emergency wait time: >30s -> -100, >60s -> -300 |
+| **Efficiency**| 20%    | Queue length (-15 per vehicle), wasted green (-5 per second) |
+| **Equity** | 15%    | Pedestrian wait > max allowed (-50), queue imbalance (up to -200) |
 
 Positive signals are given for clearing vehicles and serving emergencies quickly.
 
@@ -92,75 +91,111 @@ Positive signals are given for clearing vehicles and serving emergencies quickly
 - Python 3.10+
 - Docker (optional, for containerised deployment)
 
-### Clone & setup
+### 1. Clone & Setup
 
 ```bash
-git clone https://github.com/layirp/traffic-control-env
+git clone [https://github.com/layirp/traffic-control-env](https://github.com/layirp/traffic-control-env)
 cd traffic-control-env
 python -m venv .venv
 source .venv/bin/activate   # or .venv\Scripts\activate on Windows
 pip install -r requirements.txt
-Run the baseline inference script
-bash
+```
+
+### 2. Run the Baseline Inference Script
+This runs the heuristic expert agent (or an LLM if you set `HF_TOKEN` in `.env`). It prints logs in the required `[START]/[STEP]/[END]` format.
+
+```bash
 python inference.py
-This runs the heuristic expert agent (or an LLM if you set HF_TOKEN in .env). It prints logs in the required [START]/[STEP]/[END] format.
+```
 
-Run the three task graders
-bash
+### 3. Run the Three Task Graders
+
+```bash
 python tests/test_graders.py
-Output example:
+```
 
-text
+*Output example:*
+```text
 Easy:   0.77
 Medium: 0.73
 Hard:   0.78
-Validate OpenEnv compliance
-bash
-openenv validate --verbose
-Start the environment server locally (FastAPI)
-bash
-uvicorn server.app:app --reload --port 8000
-Then open http://localhost:8000/docs for API documentation.
+```
 
-Build and run the Docker container
-bash
+### 4. Validate OpenEnv Compliance
+
+```bash
+openenv validate --verbose
+```
+
+### 5. Start the Environment Server Locally (FastAPI)
+
+```bash
+uvicorn server.app:app --reload --port 8000
+```
+Then open `http://localhost:8000/docs` for API documentation.
+
+### 6. Build and Run the Docker Container
+
+```bash
 docker build -t traffic-control .
 docker run -p 8000:7860 traffic-control
-Test the /reset endpoint:
+```
 
-bash
+*Test the `/reset` endpoint:*
+```bash
 curl -X POST http://localhost:8000/reset -H "Content-Type: application/json" -d '{}'
-Deploy to Hugging Face Spaces
-Login to Hugging Face (use your token with write permissions):
+```
 
-bash
+---
+
+## Deploy to Hugging Face Spaces
+
+### 1. Login to Hugging Face
+Use your token with write permissions:
+
+```bash
 huggingface-cli login
-(If the CLI is not found, use python -c "from huggingface_hub import login; login()")
+```
+*(If the CLI is not found, use `python -c "from huggingface_hub import login; login()"`)*
 
-Push the environment:
+### 2. Push the Environment
 
-bash
+```bash
 openenv push --repo-id your-username/traffic-control-env
+```
 After deployment, your Space will be live at:
-https://huggingface.co/spaces/your-username/traffic-control-env
+`https://huggingface.co/spaces/your-username/traffic-control-env`
 
-Test the live Space:
+### 3. Test the Live Space
 
-bash
-curl -X POST https://your-username-traffic-control-env.hf.space/reset -H "Content-Type: application/json" -d '{}'
-Run the pre-submission validation script (provided by the hackathon):
+```bash
+curl -X POST [https://your-username-traffic-control-env.hf.space/reset](https://your-username-traffic-control-env.hf.space/reset) -H "Content-Type: application/json" -d '{}'
+```
 
-bash
-bash validate-submission.sh https://your-username-traffic-control-env.hf.space .
-Baseline Scores (Heuristic Expert Agent)
-Task	Average Reward (0-1)
-easy	0.77
-medium	0.73
-hard	0.78
-These scores are obtained by running the HeuristicExpertAgent (hand-coded domain knowledge) for 100 steps per episode, averaged over 3 episodes.
+### 4. Run the Pre-Submission Validation Script
+Provided by the hackathon:
 
-Project Structure
-text
+```bash
+bash validate-submission.sh [https://your-username-traffic-control-env.hf.space](https://your-username-traffic-control-env.hf.space) .
+```
+
+---
+
+## Baseline Scores (Heuristic Expert Agent)
+
+These scores are obtained by running the `HeuristicExpertAgent` (hand-coded domain knowledge) for 100 steps per episode, averaged over 3 episodes.
+
+| Task   | Average Reward (0-1) |
+|--------|----------------------|
+| **easy** | 0.77                 |
+| **medium** | 0.73                 |
+| **hard** | 0.78                 |
+
+---
+
+## Project Structure
+
+```text
 traffic-control-env/
 ├── .gitignore
 ├── README.md
@@ -183,17 +218,18 @@ traffic-control-env/
 │   ├── __init__.py
 │   └── test_graders.py
 └── .env (ignored, for local secrets)
-Acknowledgements
+```
+
+---
+
+## Acknowledgements
+
 This project would not have been possible without the support and infrastructure provided by:
 
-Meta (PyTorch team) – for creating the OpenEnv framework and sponsoring the hackathon.
-
-Hugging Face – for hosting the Spaces platform, providing free inference APIs, and supporting open-source AI research.
-
-Scaler – for organising the Meta OpenEnv Hackathon and providing mentorship.
-
-OpenEnv contributors – for developing the standardised environment API that makes RL environments interoperable.
-
-The open-source community – for tools like FastAPI, Uvicorn, Pydantic, and Docker that made this environment robust and production-ready.
+- **Meta (PyTorch team)** – for creating the OpenEnv framework and sponsoring the hackathon.
+- **Hugging Face** – for hosting the Spaces platform, providing free inference APIs, and supporting open-source AI research.
+- **Scaler** – for organising the Meta OpenEnv Hackathon and providing mentorship.
+- **OpenEnv contributors** – for developing the standardised environment API that makes RL environments interoperable.
+- **The open-source community** – for tools like FastAPI, Uvicorn, Pydantic, and Docker that made this environment robust and production-ready.
 
 Special thanks to the hackathon judges and mentors for their valuable feedback and for promoting the development of real-world RL benchmarks.
