@@ -6,8 +6,8 @@ No OpenAI API required - uses heuristics, simple RL, and local LLMs.
 import random
 import numpy as np
 from typing import Tuple
-from my_env.env import TrafficControlEnv
-from my_env.models import TrafficAction, Phase
+from env import TrafficControlEnv
+from models import TrafficAction, Phase
 
 # ============= BASE AGENT =============
 

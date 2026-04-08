@@ -1,6 +1,6 @@
 from typing import Tuple, Dict, Any, Optional
-from my_env.models import TrafficAction, TrafficObservation, Phase
-from my_env.simulator import TrafficSimulator
+from models import TrafficAction, TrafficObservation, Phase
+from simulator import TrafficSimulator
 
 class TrafficControlEnv:
     """

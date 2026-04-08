@@ -2,15 +2,15 @@
 Inference script for OpenEnv baseline.
 Uses OpenAI client (Hugging Face free endpoint) if API key is set.
 Otherwise uses heuristic agent.
-Outputs required [START]/[STEP]/[END] logs.
+Outputs required [START]/[STEP]/[END] logs with two‑decimal rewards.
 """
 
 import os
 import time
 from dotenv import load_dotenv
-from my_env.env import TrafficControlEnv
-from my_env.models import TrafficAction, Phase
-from my_env.agents import HeuristicExpertAgent
+from env import TrafficControlEnv
+from models import TrafficAction, Phase
+from agents import HeuristicExpertAgent
 
 load_dotenv()
 
@@ -36,7 +36,6 @@ def run_episode(task_name):
     rewards = []
     print(f"[START] task={task_name} env=traffic_control_env model={MODEL_NAME}")
 
-    # Always have a heuristic agent as fallback (or primary if no LLM)
     fallback_agent = HeuristicExpertAgent(env)
 
     while not done and step_num < 100:
@@ -54,7 +53,6 @@ def run_episode(task_name):
                     timeout=15.0
                 )
                 action_str = response.choices[0].message.content.strip().lower()
-                print(f"[DEBUG] LLM returned: {action_str}")   # verify
                 if action_str not in ["ns", "ew"]:
                     action_str = "ns"
             except Exception:
@@ -67,11 +65,12 @@ def run_episode(task_name):
         obs, reward, done, info = env.step(action)
         rewards.append(reward)
         step_num += 1
-        print(f"[STEP] step={step_num} action={action_str} reward={reward:.4f} done={str(done).lower()} error={error_msg}")
+        # Two‑decimal reward formatting (required by sample)
+        print(f"[STEP] step={step_num} action={action_str} reward={reward:.2f} done={str(done).lower()} error={error_msg}")
         time.sleep(0.05)
 
     success = "true" if (sum(rewards) / step_num) > 0.5 else "false"
-    rewards_str = ",".join([f"{r:.4f}" for r in rewards])
+    rewards_str = ",".join([f"{r:.2f}" for r in rewards])   # two decimals
     print(f"[END] success={success} steps={step_num} rewards={rewards_str}")
 
 if __name__ == "__main__":

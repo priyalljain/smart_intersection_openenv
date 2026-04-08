@@ -7,8 +7,8 @@ import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from my_env.env import TrafficControlEnv
-from my_env.agents import HeuristicExpertAgent
+from env import TrafficControlEnv
+from agents import HeuristicExpertAgent
 
 def grade_task(task_name: str, episodes: int = 3) -> float:
     """Run multiple episodes and return average reward per step."""

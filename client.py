@@ -2,7 +2,7 @@ from typing import Dict
 from openenv.core import EnvClient
 from openenv.core.client_types import StepResult
 from openenv.core.env_server.types import State
-from my_env.models import TrafficAction, TrafficObservation
+from models import TrafficAction, TrafficObservation
 
 class TrafficEnv(EnvClient[TrafficAction, TrafficObservation, State]):
     def _step_payload(self, action: TrafficAction) -> Dict:

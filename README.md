@@ -1,255 +1,199 @@
----
-title: Traffic Env Environment Server
-emoji: 📱
-colorFrom: blue
-colorTo: yellow
-sdk: docker
-pinned: false
-app_port: 8000
-base_path: /web
-tags:
-  - openenv
+# Autonomous Traffic Control Environment for OpenEnv
+
+[![OpenEnv](https://img.shields.io/badge/OpenEnv-compliant-brightgreen)](https://github.com/meta-pytorch/OpenEnv)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+A production-ready reinforcement learning environment that simulates a **4-way intersection** with realistic traffic dynamics, emergency vehicle prioritisation, pedestrians, crashes, flooding, and road closures. Designed for the Meta OpenEnv Hackathon 2026.
+
+The environment is fully compliant with the [OpenEnv](https://github.com/meta-pytorch/OpenEnv) specification – it exposes `reset()`, `step()`, and `state()` methods, uses typed Pydantic models, and can be deployed as a containerised service on Hugging Face Spaces.
+
 ---
 
-# Traffic Env Environment
+## Real-World Problem
 
-A simple test environment that echoes back messages. Perfect for testing the env APIs as well as demonstrating environment usage patterns.
+In many cities, emergency vehicles (ambulances, fire trucks) get stuck in traffic, costing lives. This environment trains AI agents to manage traffic lights adaptively, prioritising emergencies while keeping normal traffic flowing. It also models floods, crashes, pedestrians, and fairness between lanes – all essential for real-world deployment.
 
-## Quick Start
+---
 
-The simplest way to use the Traffic Env environment is through the `TrafficEnv` class:
+## Environment Features
 
-```python
-from traffic_env import TrafficAction, TrafficEnv
+- **4-way intersection** – Lanes: North, South, East, West. Left-hand traffic (India).
+- **Traffic phases** – `ns` (North-South green) and `ew` (East-West green).
+- **Emergency vehicles** – Ambulance, fire truck, police – with preemption over normal phases.
+- **Pedestrians** – Normal, elderly, child – with waiting time limits and equity penalties.
+- **Crashes** – Random events that block lanes, trigger all-red, and heavily penalise safety.
+- **Flooding** – Lanes become impassable (hard task); they automatically clear after 60-120 seconds.
+- **Road closures / construction** – Lanes can be blocked; vehicles cannot enter or exit.
+- **Fairness enforcement** – Penalty if one direction's queue is more than double the other.
+- **Starvation prevention** – Maximum green time (60 seconds) forces a phase switch.
+- **Thrashing penalty** – Penalises too-frequent phase changes.
+- **Dense reward** – Four sub-scores (safety, emergency, efficiency, equity) weighted and normalised to 0-1.
 
-try:
-    # Create environment from Docker image
-    traffic_envenv = TrafficEnv.from_docker_image("traffic_env-env:latest")
+---
 
-    # Reset
-    result = traffic_envenv.reset()
-    print(f"Reset: {result.observation.echoed_message}")
+## Tasks (3 difficulty levels)
 
-    # Send multiple messages
-    messages = ["Hello, World!", "Testing echo", "Final message"]
+| Task   | Description | Challenges |
+|--------|-------------|------------|
+| easy   | Normal vehicles only | Basic queue management, avoid thrashing, keep all lanes moving. |
+| medium | Adds emergency vehicles (ambulance, fire) | Must detect and prioritise emergencies while maintaining reasonable queues. |
+| hard   | Adds floods, crashes, and multiple emergencies | Simultaneous events, all-red phases, lane blockages, fairness penalties. |
 
-    for msg in messages:
-        result = traffic_envenv.step(TrafficAction(message=msg))
-        print(f"Sent: '{msg}'")
-        print(f"  → Echoed: '{result.observation.echoed_message}'")
-        print(f"  → Length: {result.observation.message_length}")
-        print(f"  → Reward: {result.reward}")
+---
 
-finally:
-    # Always clean up
-    traffic_envenv.close()
-```
+## Action Space
 
-That's it! The `TrafficEnv.from_docker_image()` method handles:
-- Starting the Docker container
-- Waiting for the server to be ready
-- Connecting to the environment
-- Container cleanup when you call `close()`
+The agent selects one of two phases:
 
-## Building the Docker Image
+- `ns` – Green for North and South, red for East and West.
+- `ew` – Green for East and West, red for North and South.
 
-Before using the environment, you need to build the Docker image:
+---
 
-```bash
-# From project root
-docker build -t traffic_env-env:latest -f server/Dockerfile .
-```
+## Observation Space
 
-## Deploying to Hugging Face Spaces
+The observation (Pydantic `TrafficObservation`) includes:
 
-You can easily deploy your OpenEnv environment to Hugging Face Spaces using the `openenv push` command:
+- `time` – current episode time (seconds)
+- `phase` – current phase (`ns`, `ew`, or `all_red`)
+- `time_in_phase` – seconds since last phase change
+- `queues` – dictionary `{lane: count}` for each lane
+- `total_queue_length` – sum of all queues
+- `vehicles_cleared_this_step` – throughput metric
+- `active_emergencies` – number of waiting emergency vehicles
+- `waiting_pedestrians` – number of pedestrians waiting to cross
+- `flooded_lanes`, `blocked_lanes`, `crashed_this_step` – lane statuses
+- `phase_history` – list of recent phase changes (for thrashing detection)
+- `safety_score`, `emergency_score`, `efficiency_score`, `equity_score` – sub-scores (0-1000) for debugging
 
-```bash
-# From the environment directory (where openenv.yaml is located)
-openenv push
+---
 
-# Or specify options
-openenv push --namespace my-org --private
-```
+## Reward Function
 
-The `openenv push` command will:
-1. Validate that the directory is an OpenEnv environment (checks for `openenv.yaml`)
-2. Prepare a custom build for Hugging Face Docker space (enables web interface)
-3. Upload to Hugging Face (ensuring you're logged in)
+The reward is a weighted combination of four sub-scores, normalised to [0, 1]:
+reward = (safety_score*0.30 + emergency_score*0.35 + efficiency_score*0.20 + equity_score*0.15) / 1000
+
+text
+
+| Component | Weight | Penalties (examples) |
+|-----------|--------|----------------------|
+| Safety    | 30%    | Crash (-500), min-green violation (-10), thrashing (-20) |
+| Emergency | 35%    | Emergency wait time: >30s -> -100, >60s -> -300 |
+| Efficiency| 20%    | Queue length (-15 per vehicle), wasted green (-5 per second) |
+| Equity    | 15%    | Pedestrian wait > max allowed (-50), queue imbalance (up to -200) |
+
+Positive signals are given for clearing vehicles and serving emergencies quickly.
+
+---
+
+## Installation & Local Usage
 
 ### Prerequisites
+- Python 3.10+
+- Docker (optional, for containerised deployment)
 
-- Authenticate with Hugging Face: The command will prompt for login if not already authenticated
-
-### Options
-
-- `--directory`, `-d`: Directory containing the OpenEnv environment (defaults to current directory)
-- `--repo-id`, `-r`: Repository ID in format 'username/repo-name' (defaults to 'username/env-name' from openenv.yaml)
-- `--base-image`, `-b`: Base Docker image to use (overrides Dockerfile FROM)
-- `--private`: Deploy the space as private (default: public)
-
-### Examples
+### Clone & setup
 
 ```bash
-# Push to your personal namespace (defaults to username/env-name from openenv.yaml)
-openenv push
+git clone https://github.com/layirp/traffic-control-env
+cd traffic-control-env
+python -m venv .venv
+source .venv/bin/activate   # or .venv\Scripts\activate on Windows
+pip install -r requirements.txt
+Run the baseline inference script
+bash
+python inference.py
+This runs the heuristic expert agent (or an LLM if you set HF_TOKEN in .env). It prints logs in the required [START]/[STEP]/[END] format.
 
-# Push to a specific repository
-openenv push --repo-id my-org/my-env
+Run the three task graders
+bash
+python tests/test_graders.py
+Output example:
 
-# Push with a custom base image
-openenv push --base-image ghcr.io/meta-pytorch/openenv-base:latest
+text
+Easy:   0.77
+Medium: 0.73
+Hard:   0.78
+Validate OpenEnv compliance
+bash
+openenv validate --verbose
+Start the environment server locally (FastAPI)
+bash
+uvicorn server.app:app --reload --port 8000
+Then open http://localhost:8000/docs for API documentation.
 
-# Push as a private space
-openenv push --private
+Build and run the Docker container
+bash
+docker build -t traffic-control .
+docker run -p 8000:7860 traffic-control
+Test the /reset endpoint:
 
-# Combine options
-openenv push --repo-id my-org/my-env --base-image custom-base:latest --private
-```
+bash
+curl -X POST http://localhost:8000/reset -H "Content-Type: application/json" -d '{}'
+Deploy to Hugging Face Spaces
+Login to Hugging Face (use your token with write permissions):
 
-After deployment, your space will be available at:
-`https://huggingface.co/spaces/<repo-id>`
+bash
+huggingface-cli login
+(If the CLI is not found, use python -c "from huggingface_hub import login; login()")
 
-The deployed space includes:
-- **Web Interface** at `/web` - Interactive UI for exploring the environment
-- **API Documentation** at `/docs` - Full OpenAPI/Swagger interface
-- **Health Check** at `/health` - Container health monitoring
-- **WebSocket** at `/ws` - Persistent session endpoint for low-latency interactions
+Push the environment:
 
-## Environment Details
+bash
+openenv push --repo-id your-username/traffic-control-env
+After deployment, your Space will be live at:
+https://huggingface.co/spaces/your-username/traffic-control-env
 
-### Action
-**TrafficAction**: Contains a single field
-- `message` (str) - The message to echo back
+Test the live Space:
 
-### Observation
-**TrafficObservation**: Contains the echo response and metadata
-- `echoed_message` (str) - The message echoed back
-- `message_length` (int) - Length of the message
-- `reward` (float) - Reward based on message length (length × 0.1)
-- `done` (bool) - Always False for echo environment
-- `metadata` (dict) - Additional info like step count
+bash
+curl -X POST https://your-username-traffic-control-env.hf.space/reset -H "Content-Type: application/json" -d '{}'
+Run the pre-submission validation script (provided by the hackathon):
 
-### Reward
-The reward is calculated as: `message_length × 0.1`
-- "Hi" → reward: 0.2
-- "Hello, World!" → reward: 1.3
-- Empty message → reward: 0.0
+bash
+bash validate-submission.sh https://your-username-traffic-control-env.hf.space .
+Baseline Scores (Heuristic Expert Agent)
+Task	Average Reward (0-1)
+easy	0.77
+medium	0.73
+hard	0.78
+These scores are obtained by running the HeuristicExpertAgent (hand-coded domain knowledge) for 100 steps per episode, averaged over 3 episodes.
 
-## Advanced Usage
+Project Structure
+text
+traffic-control-env/
+├── .gitignore
+├── README.md
+├── LICENSE
+├── openenv.yaml
+├── Dockerfile
+├── requirements.txt
+├── pyproject.toml
+├── inference.py
+├── client.py
+├── env.py
+├── models.py
+├── simulator.py
+├── agents.py
+├── server/
+│   ├── __init__.py
+│   ├── app.py
+│   └── requirements.txt
+├── tests/
+│   ├── __init__.py
+│   └── test_graders.py
+└── .env (ignored, for local secrets)
+Acknowledgements
+This project would not have been possible without the support and infrastructure provided by:
 
-### Connecting to an Existing Server
+Meta (PyTorch team) – for creating the OpenEnv framework and sponsoring the hackathon.
 
-If you already have a Traffic Env environment server running, you can connect directly:
+Hugging Face – for hosting the Spaces platform, providing free inference APIs, and supporting open-source AI research.
 
-```python
-from traffic_env import TrafficEnv
+Scaler – for organising the Meta OpenEnv Hackathon and providing mentorship.
 
-# Connect to existing server
-traffic_envenv = TrafficEnv(base_url="<ENV_HTTP_URL_HERE>")
+OpenEnv contributors – for developing the standardised environment API that makes RL environments interoperable.
 
-# Use as normal
-result = traffic_envenv.reset()
-result = traffic_envenv.step(TrafficAction(message="Hello!"))
-```
+The open-source community – for tools like FastAPI, Uvicorn, Pydantic, and Docker that made this environment robust and production-ready.
 
-Note: When connecting to an existing server, `traffic_envenv.close()` will NOT stop the server.
-
-### Using the Context Manager
-
-The client supports context manager usage for automatic connection management:
-
-```python
-from traffic_env import TrafficAction, TrafficEnv
-
-# Connect with context manager (auto-connects and closes)
-with TrafficEnv(base_url="http://localhost:8000") as env:
-    result = env.reset()
-    print(f"Reset: {result.observation.echoed_message}")
-    # Multiple steps with low latency
-    for msg in ["Hello", "World", "!"]:
-        result = env.step(TrafficAction(message=msg))
-        print(f"Echoed: {result.observation.echoed_message}")
-```
-
-The client uses WebSocket connections for:
-- **Lower latency**: No HTTP connection overhead per request
-- **Persistent session**: Server maintains your environment state
-- **Efficient for episodes**: Better for many sequential steps
-
-### Concurrent WebSocket Sessions
-
-The server supports multiple concurrent WebSocket connections. To enable this,
-modify `server/app.py` to use factory mode:
-
-```python
-# In server/app.py - use factory mode for concurrent sessions
-app = create_app(
-    TrafficEnvironment,  # Pass class, not instance
-    TrafficAction,
-    TrafficObservation,
-    max_concurrent_envs=4,  # Allow 4 concurrent sessions
-)
-```
-
-Then multiple clients can connect simultaneously:
-
-```python
-from traffic_env import TrafficAction, TrafficEnv
-from concurrent.futures import ThreadPoolExecutor
-
-def run_episode(client_id: int):
-    with TrafficEnv(base_url="http://localhost:8000") as env:
-        result = env.reset()
-        for i in range(10):
-            result = env.step(TrafficAction(message=f"Client {client_id}, step {i}"))
-        return client_id, result.observation.message_length
-
-# Run 4 episodes concurrently
-with ThreadPoolExecutor(max_workers=4) as executor:
-    results = list(executor.map(run_episode, range(4)))
-```
-
-## Development & Testing
-
-### Direct Environment Testing
-
-Test the environment logic directly without starting the HTTP server:
-
-```bash
-# From the server directory
-python3 server/traffic_env_environment.py
-```
-
-This verifies that:
-- Environment resets correctly
-- Step executes actions properly
-- State tracking works
-- Rewards are calculated correctly
-
-### Running Locally
-
-Run the server locally for development:
-
-```bash
-uvicorn server.app:app --reload
-```
-
-## Project Structure
-
-```
-traffic_env/
-├── .dockerignore         # Docker build exclusions
-├── __init__.py            # Module exports
-├── README.md              # This file
-├── openenv.yaml           # OpenEnv manifest
-├── pyproject.toml         # Project metadata and dependencies
-├── uv.lock                # Locked dependencies (generated)
-├── client.py              # TrafficEnv client
-├── models.py              # Action and Observation models
-└── server/
-    ├── __init__.py        # Server module exports
-    ├── traffic_env_environment.py  # Core environment logic
-    ├── app.py             # FastAPI application (HTTP + WebSocket endpoints)
-    └── Dockerfile         # Container image definition
-```
+Special thanks to the hackathon judges and mentors for their valuable feedback and for promoting the development of real-world RL benchmarks.

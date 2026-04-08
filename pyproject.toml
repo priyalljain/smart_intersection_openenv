@@ -27,4 +27,5 @@ dev = [
 server = "server.app:main"
 
 [tool.setuptools]
-packages = ["my_env", "server"]
+# No explicit packages – rely on automatic discovery (or leave empty)
+packages = []

@@ -8,4 +8,4 @@ tasks:
   - medium
   - hard
 environment:
-  class: my_env.env.TrafficControlEnv
+  class: env.TrafficControlEnv  #updated
