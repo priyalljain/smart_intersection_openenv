@@ -6,25 +6,30 @@ from my_env.models import TrafficAction, TrafficObservation
 
 class TrafficEnv(EnvClient[TrafficAction, TrafficObservation, State]):
     def _step_payload(self, action: TrafficAction) -> Dict:
+        # Return the action as a plain dict (no "action" wrapper)
         return {"phase": action.phase.value}
 
     def _parse_result(self, payload: Dict) -> StepResult[TrafficObservation]:
         obs_data = payload.get("observation", {})
-        # Convert queues back to Lane enum keys (simplified – use strings for safety)
-        queues_raw = obs_data.get("queues", {})
-        from my_env.models import Lane
-        queues = {Lane(k): v for k, v in queues_raw.items()}
         observation = TrafficObservation(
-            queues=queues,
-            current_phase=obs_data["current_phase"],
-            time_in_phase=obs_data["time_in_phase"],
-            emergency_detected=obs_data["emergency_detected"],
-            emergency_lane=obs_data.get("emergency_lane"),
-            pedestrian_waiting=obs_data["pedestrian_waiting"],
-            blocked_lanes=[Lane(l) for l in obs_data.get("blocked_lanes", [])],
-            flooded_lanes=[Lane(l) for l in obs_data.get("flooded_lanes", [])],
-            time=obs_data["time"],
-            crash_detected=obs_data["crash_detected"]
+            time=obs_data.get("time", 0.0),
+            phase=obs_data.get("phase", "ns"),
+            time_in_phase=obs_data.get("time_in_phase", 0.0),
+            queues=obs_data.get("queues", {}),
+            total_queue_length=obs_data.get("total_queue_length", 0),
+            vehicles_cleared_this_step=obs_data.get("vehicles_cleared_this_step", 0),
+            active_emergencies=obs_data.get("active_emergencies", 0),
+            waiting_pedestrians=obs_data.get("waiting_pedestrians", 0),
+            flooded_lanes=obs_data.get("flooded_lanes", []),
+            blocked_lanes=obs_data.get("blocked_lanes", []),
+            crashed_this_step=obs_data.get("crashed_this_step", False),
+            phase_history=obs_data.get("phase_history", []),
+            safety_score=obs_data.get("safety_score", 1000.0),
+            emergency_score=obs_data.get("emergency_score", 1000.0),
+            efficiency_score=obs_data.get("efficiency_score", 1000.0),
+            equity_score=obs_data.get("equity_score", 1000.0),
+            reward=obs_data.get("reward", 0.0),
+            done=obs_data.get("done", False),
         )
         return StepResult(
             observation=observation,

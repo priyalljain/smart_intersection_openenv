@@ -1,25 +1,19 @@
-# Copyright (c) Meta Platforms, Inc. and affiliates.
-# All rights reserved.
-#
-# This source code is licensed under the BSD-style license found in the
-# LICENSE file in the root directory of this source tree.
-
 import os
+from fastapi import FastAPI
 from openenv.core.env_server import create_app
-from .my_environment import TrafficControlEnv, TrafficAction, TrafficObservation
 
-# Create the FastAPI app
-app = create_app(
-    env_class=TrafficControlEnv,
-    action_model=TrafficAction,
-    observation_model=TrafficObservation,
-)
+from my_env.env import TrafficControlEnv
+from my_env.models import TrafficAction, TrafficObservation
+
+# Pass the CLASS, not instance
+app = create_app(TrafficControlEnv, TrafficAction, TrafficObservation)
 
 def main():
-    """Main entry point for openenv serve."""
     import uvicorn
+    host = os.getenv("HOST", "0.0.0.0")
     port = int(os.getenv("PORT", 8000))
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    workers = int(os.getenv("WORKERS", 4))
+    uvicorn.run("server.app:app", host=host, port=port, workers=workers, reload=False)
 
 if __name__ == "__main__":
     main()
