@@ -1,6 +1,6 @@
 """
 Inference script for OpenEnv baseline.
-Uses OpenAI client (Hugging Face free endpoint) if an API key is set.
+Uses the injected OpenAI-compatible API endpoint when available.
 Otherwise uses the heuristic agent.
 Outputs required [START]/[STEP]/[END] logs with two-decimal rewards.
 """
@@ -16,11 +16,12 @@ from models import Phase, TrafficAction
 
 load_dotenv()
 
-# Keep deployment smoke tests deterministic unless LLM mode is explicitly enabled.
-API_KEY = os.getenv("OPENAI_API_KEY") or os.getenv("HF_TOKEN")
-LLM_MODE_ENABLED = os.getenv("USE_LLM", "").strip().lower() in {"1", "true", "yes"}
+# If the grader injects an API base URL and key, always use that proxy.
+API_KEY = os.getenv("API_KEY")
+API_BASE_URL = os.getenv("API_BASE_URL")
 USE_LLM = (
-    LLM_MODE_ENABLED
+    API_BASE_URL is not None
+    and API_BASE_URL.strip() != ""
     and API_KEY is not None
     and API_KEY.strip() != ""
     and not API_KEY.startswith("#")
@@ -40,18 +41,11 @@ def _safe_log(message: str) -> None:
 if USE_LLM:
     from openai import OpenAI
 
-    API_BASE_URL = os.getenv(
-        "API_BASE_URL",
-        "https://router.huggingface.co/hf-inference/models/meta-llama/Llama-3.2-3B-Instruct/v1",
-    )
-    MODEL_NAME = os.getenv("MODEL_NAME", "meta-llama/Llama-3.2-3B-Instruct")
+    MODEL_NAME = os.getenv("MODEL_NAME", "gpt-4.1-mini")
     client = OpenAI(base_url=API_BASE_URL, api_key=API_KEY)
     _safe_log(f"Using LLM: {MODEL_NAME}")
 else:
-    if LLM_MODE_ENABLED:
-        _safe_log("USE_LLM is set, but no valid API key was found. Using heuristic agent only.")
-    else:
-        _safe_log("Using heuristic agent only. Set USE_LLM=true to enable remote model calls.")
+    _safe_log("Using heuristic agent only. Provide API_BASE_URL and API_KEY to enable remote model calls.")
     MODEL_NAME = "heuristic"
 
 

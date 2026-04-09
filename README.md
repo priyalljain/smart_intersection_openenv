@@ -110,7 +110,7 @@ pip install -r requirements.txt
 ```
 
 ### 2. Run the Baseline Inference Script
-This runs the heuristic expert agent (or an LLM if you set `HF_TOKEN` in `.env`). It prints logs in the required `[START]/[STEP]/[END]` format.
+This uses the injected LLM proxy automatically whenever `API_BASE_URL` and `API_KEY` are present in the environment. Otherwise it falls back to the heuristic expert agent. It prints logs in the required `[START]/[STEP]/[END]` format.
 
 ```bash
 python inference.py
