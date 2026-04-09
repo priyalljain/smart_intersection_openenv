@@ -1,32 +1,59 @@
 """
 Inference script for OpenEnv baseline.
-Uses OpenAI client (Hugging Face free endpoint) if API key is set.
-Otherwise uses heuristic agent.
-Outputs required [START]/[STEP]/[END] logs with two‑decimal rewards.
+Uses OpenAI client (Hugging Face free endpoint) if an API key is set.
+Otherwise uses the heuristic agent.
+Outputs required [START]/[STEP]/[END] logs with two-decimal rewards.
 """
 
 import os
 import time
+
 from dotenv import load_dotenv
-from env import TrafficControlEnv
-from models import TrafficAction, Phase
+
 from agents import HeuristicExpertAgent
+from env import TrafficControlEnv
+from models import Phase, TrafficAction
 
 load_dotenv()
 
-# Check if API key is provided and not a placeholder
+# Keep deployment smoke tests deterministic unless LLM mode is explicitly enabled.
 API_KEY = os.getenv("OPENAI_API_KEY") or os.getenv("HF_TOKEN")
-USE_LLM = API_KEY is not None and API_KEY.strip() != "" and not API_KEY.startswith("#")
+LLM_MODE_ENABLED = os.getenv("USE_LLM", "").strip().lower() in {"1", "true", "yes"}
+USE_LLM = (
+    LLM_MODE_ENABLED
+    and API_KEY is not None
+    and API_KEY.strip() != ""
+    and not API_KEY.startswith("#")
+)
+
+
+def _safe_log(message: str) -> None:
+    """
+    Avoid Windows console encoding crashes during smoke tests.
+    """
+    try:
+        print(message)
+    except UnicodeEncodeError:
+        print(message.encode("ascii", errors="replace").decode("ascii"))
+
 
 if USE_LLM:
     from openai import OpenAI
-    API_BASE_URL = os.getenv("API_BASE_URL", "https://router.huggingface.co/hf-inference/models/meta-llama/Llama-3.2-3B-Instruct/v1")
+
+    API_BASE_URL = os.getenv(
+        "API_BASE_URL",
+        "https://router.huggingface.co/hf-inference/models/meta-llama/Llama-3.2-3B-Instruct/v1",
+    )
     MODEL_NAME = os.getenv("MODEL_NAME", "meta-llama/Llama-3.2-3B-Instruct")
     client = OpenAI(base_url=API_BASE_URL, api_key=API_KEY)
-    print(f"✅ Using LLM: {MODEL_NAME}")
+    _safe_log(f"Using LLM: {MODEL_NAME}")
 else:
-    print("⚠️ No valid API key. Using heuristic agent only.")
+    if LLM_MODE_ENABLED:
+        _safe_log("USE_LLM is set, but no valid API key was found. Using heuristic agent only.")
+    else:
+        _safe_log("Using heuristic agent only. Set USE_LLM=true to enable remote model calls.")
     MODEL_NAME = "heuristic"
+
 
 def run_episode(task_name):
     env = TrafficControlEnv(task=task_name)
@@ -43,35 +70,45 @@ def run_episode(task_name):
         error_msg = "null"
 
         if USE_LLM:
-            prompt = f"""You control a traffic light. Current phase: {obs.phase}. Queues: {obs.queues}. Emergency vehicles present: {obs.active_emergencies > 0}. Pedestrians waiting: {obs.waiting_pedestrians}. Respond with only 'ns' or 'ew'."""
+            prompt = (
+                "You control a traffic light. "
+                f"Current phase: {obs.phase}. "
+                f"Queues: {obs.queues}. "
+                f"Emergency vehicles present: {obs.active_emergencies > 0}. "
+                f"Pedestrians waiting: {obs.waiting_pedestrians}. "
+                "Respond with only 'ns' or 'ew'."
+            )
             try:
                 response = client.chat.completions.create(
                     model=MODEL_NAME,
                     messages=[{"role": "user", "content": prompt}],
                     temperature=0.7,
                     max_tokens=10,
-                    timeout=15.0
+                    timeout=15.0,
                 )
                 action_str = response.choices[0].message.content.strip().lower()
                 if action_str not in ["ns", "ew"]:
                     action_str = "ns"
             except Exception:
-                # Silent fallback – no error printed to keep logs clean
+                # Silent fallback keeps the grader log format stable.
                 action_str = fallback_agent.get_action(obs).phase.value
         else:
             action_str = fallback_agent.get_action(obs).phase.value
 
         action = TrafficAction(phase=Phase(action_str))
-        obs, reward, done, info = env.step(action)
+        obs, reward, done, _info = env.step(action)
         rewards.append(reward)
         step_num += 1
-        # Two‑decimal reward formatting (required by sample)
-        print(f"[STEP] step={step_num} action={action_str} reward={reward:.2f} done={str(done).lower()} error={error_msg}")
+        print(
+            f"[STEP] step={step_num} action={action_str} reward={reward:.2f} "
+            f"done={str(done).lower()} error={error_msg}"
+        )
         time.sleep(0.05)
 
-    success = "true" if (sum(rewards) / step_num) > 0.5 else "false"
-    rewards_str = ",".join([f"{r:.2f}" for r in rewards])   # two decimals
+    success = "true" if step_num > 0 and (sum(rewards) / step_num) > 0.5 else "false"
+    rewards_str = ",".join([f"{r:.2f}" for r in rewards])
     print(f"[END] success={success} steps={step_num} rewards={rewards_str}")
+
 
 if __name__ == "__main__":
     for task in ["easy", "medium", "hard"]:

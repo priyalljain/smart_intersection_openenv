@@ -1,3 +1,11 @@
+---
+title: Traffic Control Environment Server
+sdk: docker
+app_port: 7860
+base_path: /web
+pinned: false
+---
+
 # Autonomous Traffic Control Environment for OpenEnv
 
 [![OpenEnv](https://img.shields.io/badge/OpenEnv-compliant-brightgreen)](https://github.com/meta-pytorch/OpenEnv)
