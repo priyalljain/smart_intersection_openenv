@@ -16,7 +16,7 @@ from typing import Dict, List, Tuple, Optional
 from dataclasses import dataclass, field
 from enum import Enum
 
-STRICT_REWARD_EPSILON = 0.0001
+STRICT_REWARD_EPSILON = 0.001
 
 class Lane(str, Enum):
     NORTH = "north"
@@ -185,7 +185,17 @@ class TrafficSimulator:
         self._update_pedestrians(dt)
         self._detect_crashes()
         self._resolve_events()
-        reward = self._calculate_comprehensive_reward()
+        # Clamp reward to be strictly between EPSILON and (1.0 - EPSILON)
+        # Using 0.001 gives margin: reward in (0.001, 0.999)
+        min_reward = STRICT_REWARD_EPSILON
+        max_reward = 1.0 - STRICT_REWARD_EPSILON
+        reward = max(min_reward, min(max_reward, reward))
+
+        # Double-check we're not at the boundaries (floating point safety)
+        if reward <= 0.0:
+            reward = min_reward
+        if reward >= 1.0:
+            reward = max_reward
         done = self.time >= self.max_episode_time
         return self._get_observation(), reward, done
 
@@ -242,6 +252,7 @@ class TrafficSimulator:
                 self.phase_history.append((self.time, self.phase.value))
             else:
                 self.safety_score = max(0, self.safety_score - 10)
+                self.safety_score = min(1000, self.safety_score)  # Cap at max
         self.phase_timer += 1.0
 
     # ---- Vehicle Movement ----
