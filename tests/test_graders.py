@@ -10,9 +10,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from env import TrafficControlEnv
 from agents import HeuristicExpertAgent
 
-STRICT_SCORE_EPSILON = 0.001
-MIN_SCORE = 0.001
-MAX_SCORE = 0.999
+STRICT_SCORE_EPSILON = 0.01
+MIN_SCORE = 0.01
+MAX_SCORE = 0.99
 
 def _strict_unit_interval(value: float) -> float:
     # Clamp to the safe range
@@ -65,13 +65,24 @@ if __name__ == "__main__":
     medium_score = grade_task('medium')
     hard_score = grade_task('hard')
     
-    print(f"Easy:   {easy_score:.4f}")
-    print(f"Medium: {medium_score:.4f}")
-    print(f"Hard:   {hard_score:.4f}")
+    # 1. PRINT RAW SCORES FOR THE VALIDATOR (Machine Readable)
+    # Using 'task_score:value' is a standard format for these hackathons
+    print("\n---BEGIN VALIDATOR SCORES---")
+    print(f"easy_score:{easy_score:.4f}")
+    print(f"medium_score:{medium_score:.4f}")
+    print(f"hard_score:{hard_score:.4f}")
+    print("---END VALIDATOR SCORES---\n")
     
-    # Verify all scores are strictly in (0, 1)
+    # 2. LOCAL VERIFICATION (For your eyes only)
+    all_valid = True
     for task, score in [('easy', easy_score), ('medium', medium_score), ('hard', hard_score)]:
         if score <= 0.0 or score >= 1.0:
-            print(f"ERROR: {task} score {score} is NOT strictly in (0, 1)!")
-        else:
-            print(f"✓ {task} score {score} is valid (strictly in (0, 1))")
+            print(f"CRITICAL ERROR: {task} score {score} is out of range!")
+            all_valid = False
+            
+    if all_valid:
+        print("Local check passed. Ready for submission.")
+    else:
+        # Exit with error code to stop the Docker build if it's failing
+        import sys
+        sys.exit(1)

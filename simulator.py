@@ -16,7 +16,7 @@ from typing import Dict, List, Tuple, Optional
 from dataclasses import dataclass, field
 from enum import Enum
 
-STRICT_REWARD_EPSILON = 0.001
+STRICT_REWARD_EPSILON = 0.01
 
 class Lane(str, Enum):
     NORTH = "north"
@@ -448,7 +448,8 @@ class TrafficSimulator:
                     self.equity_score * 0.15)
         combined = max(0.0, min(1000.0, combined))
         reward = combined / 1000.0
-        reward = min(1.0 - STRICT_REWARD_EPSILON, max(STRICT_REWARD_EPSILON, reward))
+        # FORCE margin: strictly between 0.01 and 0.99
+        reward = max(STRICT_REWARD_EPSILON, min(1.0 - STRICT_REWARD_EPSILON, reward))
 
         self.scores_history.append({
             'time': self.time,
@@ -458,7 +459,7 @@ class TrafficSimulator:
             'equity': self.equity_score,
             'combined': combined
         })
-        return reward
+        return round(float(reward), 4)
 
     def _get_observation(self) -> dict:
         return {
