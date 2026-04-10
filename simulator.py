@@ -185,6 +185,7 @@ class TrafficSimulator:
         self._update_pedestrians(dt)
         self._detect_crashes()
         self._resolve_events()
+        reward = self._calculate_comprehensive_reward()
         # Clamp reward to be strictly between EPSILON and (1.0 - EPSILON)
         # Using 0.001 gives margin: reward in (0.001, 0.999)
         min_reward = STRICT_REWARD_EPSILON
