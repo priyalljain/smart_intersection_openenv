@@ -11,3 +11,4 @@ __pycache__/
 test_docker.py
 test_local.
 prevalidation.sh
+test_reward.py

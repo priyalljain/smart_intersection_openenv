@@ -17,8 +17,8 @@ from models import Phase, TrafficAction
 load_dotenv()
 
 # --- MODIFIED: Strict 1-decimal boundaries ---
-MIN_REWARD = 0.1
-MAX_REWARD = 0.9
+MIN_REWARD = 0.01
+MAX_REWARD = 0.99
 
 def clamp_reward(reward: float) -> float:
     """Ensure reward is strictly between 0.1 and 0.9 at 1-decimal precision."""
@@ -31,7 +31,7 @@ def clamp_reward(reward: float) -> float:
         return MIN_REWARD
     if val >= MAX_REWARD:
         return MAX_REWARD
-    return round(val, 1)
+    return round(val, 3)
 
 # If the grader injects an API base URL and key, always use that proxy.
 API_KEY = os.getenv("API_KEY")
@@ -107,9 +107,8 @@ def run_episode(task_name):
         reward = clamp_reward(reward)
         rewards.append(reward)
 
-        # --- MODIFIED: reward formatted to .1f ---
         print(
-            f"[STEP] step={step_num} action={action_str} reward={reward:.1f} "
+            f"[STEP] step={step_num} action={action_str} reward={reward:.3f} "
             f"done={str(done).lower()} error={error_msg}",
             flush=True
         )
@@ -118,12 +117,11 @@ def run_episode(task_name):
     # Calculate average reward
     avg_reward = sum(rewards) / step_num if step_num > 0 else MIN_REWARD
     
-    # --- MODIFIED: Ensure score and rewards list use .1f ---
     score = clamp_reward(avg_reward)
     success = "true" if score > 0.5 else "false"
-    rewards_str = ",".join([f"{clamp_reward(r):.1f}" for r in rewards])
+    rewards_str = ",".join([f"{clamp_reward(r):.3f}" for r in rewards])
     
-    print(f"[END] success={success} steps={step_num} score={score:.1f} rewards={rewards_str}", flush=True)
+    print(f"[END] success={success} steps={step_num} score={score:.3f} rewards={rewards_str}", flush=True)
 
 if __name__ == "__main__":
     for task in ["easy", "medium", "hard"]:
