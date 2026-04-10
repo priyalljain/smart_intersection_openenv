@@ -10,12 +10,15 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from env import TrafficControlEnv
 from agents import HeuristicExpertAgent
 
-STRICT_SCORE_EPSILON = 1e-6
-
+STRICT_SCORE_EPSILON = 0.0001
 
 def _strict_unit_interval(value: float) -> float:
-    """Clamp grader outputs to the validator's required open interval."""
-    return min(1.0 - STRICT_SCORE_EPSILON, max(STRICT_SCORE_EPSILON, value))
+    """Clamp grader outputs to be strictly inside (0, 1)."""
+    if value <= 0.0:
+        return 0.0001
+    if value >= 1.0:
+        return 0.9999
+    return value
 
 
 def grade_task(task_name: str, episodes: int = 3) -> float:

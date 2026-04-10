@@ -16,7 +16,7 @@ from typing import Dict, List, Tuple, Optional
 from dataclasses import dataclass, field
 from enum import Enum
 
-STRICT_REWARD_EPSILON = 1e-6
+STRICT_REWARD_EPSILON = 0.0001
 
 class Lane(str, Enum):
     NORTH = "north"
