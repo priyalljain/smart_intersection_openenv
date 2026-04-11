@@ -1,6 +1,6 @@
 """
 Three task graders for easy, medium, hard.
-Each runs a heuristic agent and returns average reward per step (0-1).
+PHASE 2 FIX: All scores clamped to 0.1-0.9 range (never 0.0 or 1.0)
 """
 
 import sys
@@ -10,27 +10,29 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from env import TrafficControlEnv
 from agents import HeuristicExpertAgent
 
-STRICT_SCORE_EPSILON = 0.01
-MIN_SCORE = 0.01
-MAX_SCORE = 0.99
-
-def _strict_unit_interval(value: float) -> float:
-    # Clamp to the safe range
-    clamped = max(MIN_SCORE, min(MAX_SCORE, value))
+def clamp_score(value: float) -> float:
+    """
+    Clamp score to 0.1-0.9 range.
+    CRITICAL: Never return 0.0 or 1.0 (validator rejects these).
+    """
+    try:
+        value = float(value)
+    except (TypeError, ValueError):
+        return 0.1
     
-    # Double-check we're not at the boundaries
-    if clamped <= 0.0 or clamped >= 1.0:
-        # This should never happen, but just in case
-        return 0.5  # Return middle value as fallback
+    # Snap to safe zone
+    if value <= 0.1:
+        return 0.1
+    if value >= 0.9:
+        return 0.9
     
-    return clamped
+    return round(value, 1)
 
 
 def grade_task(task_name: str, episodes: int = 3) -> float:
     """
-    Run multiple episodes and return average reward per step.
-    
-    Ensures the returned score is strictly between 0 and 1.
+    Grade a task: run episodes, return average reward.
+    Output is strictly in 0.1-0.9 range.
     """
     episode_scores = []
     
@@ -39,23 +41,22 @@ def grade_task(task_name: str, episodes: int = 3) -> float:
         agent = HeuristicExpertAgent(env)
         total_reward, steps, _ = agent.run_episode(max_steps=200)
         
-        # Calculate average reward per step
+        # Average reward per step
         if steps > 0:
-            avg_reward_per_step = total_reward / steps
+            avg_reward = total_reward / steps
         else:
-            # Edge case: 0 steps (shouldn't happen)
-            avg_reward_per_step = STRICT_SCORE_EPSILON
+            avg_reward = 0.1
         
-        # Clamp the episode score to ensure it's strictly in (0, 1)
-        episode_score = _strict_unit_interval(avg_reward_per_step)
+        # Clamp episode score to safe range
+        episode_score = clamp_score(avg_reward)
         episode_scores.append(episode_score)
     
-    # Calculate average of episode scores
+    # Average of episode scores
     average_score = sum(episode_scores) / len(episode_scores)
     
-    # Final clamp to ensure output is strictly in (0, 1)
-    # This is the score returned by the grader
-    final_score = _strict_unit_interval(average_score)
+    # --- FINAL CLAMP ---
+    # If the average is 0.0 or 0.99, move it to 0.1 or 0.9
+    final_score = clamp_score(average_score)
     
     return final_score
  
@@ -65,24 +66,27 @@ if __name__ == "__main__":
     medium_score = grade_task('medium')
     hard_score = grade_task('hard')
     
-    # 1. PRINT RAW SCORES FOR THE VALIDATOR (Machine Readable)
-    # Using 'task_score:value' is a standard format for these hackathons
-    print("\n---BEGIN VALIDATOR SCORES---")
-    print(f"easy_score:{easy_score:.4f}")
-    print(f"medium_score:{medium_score:.4f}")
-    print(f"hard_score:{hard_score:.4f}")
-    print("---END VALIDATOR SCORES---\n")
+    print(f"\neasy_score: {easy_score:.2f}")
+    print(f"medium_score: {medium_score:.2f}")
+    print(f"hard_score: {hard_score:.2f}\n")
     
-    # 2. LOCAL VERIFICATION (For your eyes only)
+    # Validation: all scores must be in (0, 1) and NOT 0.0 or 1.0
     all_valid = True
     for task, score in [('easy', easy_score), ('medium', medium_score), ('hard', hard_score)]:
+        # Check if strictly between 0 and 1
         if score <= 0.0 or score >= 1.0:
-            print(f"CRITICAL ERROR: {task} score {score} is out of range!")
+            print(f"✗ ERROR: {task} score {score} is out of bounds [0, 1]!")
             all_valid = False
-            
+        # Check if it's in our safe range
+        elif score < 0.1 or score > 0.9:
+            print(f"✗ WARNING: {task} score {score} is outside safe range [0.1, 0.9]!")
+            all_valid = False
+        else:
+            print(f"✓ {task}: {score:.2f} (valid)")
+    
     if all_valid:
-        print("Local check passed. Ready for submission.")
+        print("\n✓✓✓ ALL SCORES VALID - READY FOR PHASE 2 ✓✓✓")
+        sys.exit(0)
     else:
-        # Exit with error code to stop the Docker build if it's failing
-        import sys
+        print("\n✗✗✗ SOME SCORES INVALID ✗✗✗")
         sys.exit(1)

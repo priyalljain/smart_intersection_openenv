@@ -7,7 +7,7 @@ from models import TrafficAction, TrafficObservation
 class TrafficEnv(EnvClient[TrafficAction, TrafficObservation, State]):
     def _step_payload(self, action: TrafficAction) -> Dict:
         # Return the action as a plain dict (no "action" wrapper)
-        return {"phase": action.phase.value}
+        return {"action": {"phase": action.phase.value}}
 
     def _parse_result(self, payload: Dict) -> StepResult[TrafficObservation]:
         obs_data = payload.get("observation", {})

@@ -5,11 +5,7 @@ from simulator import TrafficSimulator
 class TrafficControlEnv:
     """
     OpenEnv-compliant traffic control environment.
-    
-    KEY ISSUE FIX:
-    - step() returns (obs, reward, done, info) for external use
-    - step_async() returns ONLY obs for OpenEnv server
-    - OpenEnv server calls step_async() and handles reward/done itself
+    FIXED: Handles reset() returning (obs_dict, reward, done) tuple
     """
     
     def __init__(self, task: str = "easy"):
@@ -24,7 +20,7 @@ class TrafficControlEnv:
         self.sim = TrafficSimulator(config)
         self.episode_count = 0
         self.step_count = 0
-        self.current_reward = 0.0
+        self.current_reward = 0.1  # Default to 0.1 (never 0.0)
         self.is_done = False
 
     def reset(self, seed: Optional[int] = None) -> TrafficObservation:
@@ -34,9 +30,15 @@ class TrafficControlEnv:
         """
         self.episode_count += 1
         self.step_count = 0
-        self.current_reward = 0.0
         self.is_done = False
-        obs_dict = self.sim.reset(seed)
+        
+        # simulator.reset() now returns (obs_dict, reward, done)
+        obs_dict, reward, done = self.sim.reset(seed)
+        
+        # Store reward for step_async() to use
+        self.current_reward = reward  # Will be 0.1 from simulator
+        self.is_done = done
+        
         return self._dict_to_observation(obs_dict)
 
     async def reset_async(self, seed: Optional[int] = None) -> TrafficObservation:
@@ -53,10 +55,13 @@ class TrafficControlEnv:
         """
         self.step_count += 1
         obs_dict, reward, done = self.sim.step(action.phase, dt=1.0)
-        obs = self._dict_to_observation(obs_dict)
         
+        # UPDATE FIRST (before creating observation)
         self.current_reward = reward
         self.is_done = done
+        
+        # CREATE OBSERVATION (now uses updated reward)
+        obs = self._dict_to_observation(obs_dict)
         
         info = {
             "episode": self.episode_count,
@@ -71,13 +76,19 @@ class TrafficControlEnv:
         Async step for OpenEnv server.
         CRITICAL: Return ONLY the observation, NOT a tuple!
         OpenEnv will handle reward and done itself.
+        
+        CRITICAL FIX: Update current_reward BEFORE creating observation!
         """
         self.step_count += 1
         obs_dict, reward, done = self.sim.step(action.phase, dt=1.0)
         
+        # UPDATE FIRST (before creating observation)
         self.current_reward = reward
         self.is_done = done
+        
+        # CREATE OBSERVATION (now uses updated reward)
         obs = self._dict_to_observation(obs_dict)
+        
         return obs
 
     def state(self) -> Dict[str, Any]:
@@ -89,7 +100,12 @@ class TrafficControlEnv:
         pass
 
     def _dict_to_observation(self, obs_dict: dict) -> TrafficObservation:
-        """Convert simulator dict to Pydantic TrafficObservation"""
+        """
+        Convert simulator dict to Pydantic TrafficObservation.
+        
+        CRITICAL: This uses self.current_reward and self.is_done.
+        These MUST be updated BEFORE calling this method in step_async()!
+        """
         return TrafficObservation(
             time=obs_dict["time"],
             phase=obs_dict["phase"],
@@ -107,6 +123,7 @@ class TrafficControlEnv:
             emergency_score=obs_dict.get("emergency_score", 1000.0),
             efficiency_score=obs_dict.get("efficiency_score", 1000.0),
             equity_score=obs_dict.get("equity_score", 1000.0),
+            # NOW uses updated current_reward (0.1-0.9, never 0.0)
             reward=self.current_reward,
             done=self.is_done,
         )

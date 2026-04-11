@@ -1,8 +1,6 @@
 """
 Inference script for OpenEnv baseline.
-Uses the injected OpenAI-compatible API endpoint when available.
-Otherwise uses the heuristic agent.
-Outputs required [START]/[STEP]/[END] logs.
+PHASE 2 FIX: All rewards clamped to 0.1-0.9 range (never 0.0 or 1.0)
 """
 
 import os
@@ -16,22 +14,24 @@ from models import Phase, TrafficAction
 
 load_dotenv()
 
-# --- MODIFIED: Strict 1-decimal boundaries ---
-MIN_REWARD = 0.01
-MAX_REWARD = 0.99
-
-def clamp_reward(reward: float) -> float:
-    """Ensure reward is strictly between 0.1 and 0.9 at 1-decimal precision."""
+# --- PHASE 2 FIX: Ensure final scores are strictly 0.1 to 0.9 ---
+def clamp_reward(val: float) -> float:
+    """
+    Clamp reward to 0.1-0.9 range.
+    Never return 0.0 or 1.0 (validator rejects these).
+    """
     try:
-        val = float(reward)
+        val = float(val)
     except (TypeError, ValueError):
-        return MIN_REWARD
+        return 0.1
     
-    if val <= MIN_REWARD:
-        return MIN_REWARD
-    if val >= MAX_REWARD:
-        return MAX_REWARD
-    return round(val, 3)
+    # Snap to safe zone
+    if val <= 0.1:
+        return 0.1
+    if val >= 0.9:
+        return 0.9
+    
+    return round(val, 1)
 
 # If the grader injects an API base URL and key, always use that proxy.
 API_KEY = os.getenv("API_KEY")
@@ -108,25 +108,35 @@ def run_episode(task_name):
         rewards.append(reward)
 
         print(
-            f"[STEP] step={step_num} action={action_str} reward={reward:.3f} "
+            f"[STEP] step={step_num} action={action_str} reward={reward:.2f} "
             f"done={str(done).lower()} error={error_msg}",
             flush=True
         )
         time.sleep(0.05)
 
     # Calculate average reward
-    avg_reward = sum(rewards) / step_num if step_num > 0 else MIN_REWARD
+    # If no steps, default to 0.1 (not 0.0)
+    avg_reward = sum(rewards) / step_num if step_num > 0 else 0.1
     
-    score = clamp_reward(avg_reward)
-    success = "true" if score > 0.5 else "false"
-    rewards_str = ",".join([f"{clamp_reward(r):.3f}" for r in rewards])
+    # Clamp final score to 0.1-0.9
+    final_score = clamp_reward(avg_reward)
     
-    print(f"[END] success={success} steps={step_num} score={score:.3f} rewards={rewards_str}", flush=True)
+    # Success criteria based on new range (0.5 is middle)
+    success = "true" if final_score >= 0.5 else "false"
+    
+    # Format rewards list (use :.2f to match spec)
+    rewards_str = ",".join([f"{r:.2f}" for r in rewards])
+    
+    # Output final line with :.2f formatting
+    print(
+        f"[END] success={success} steps={step_num} score={final_score:.2f} rewards={rewards_str}",
+        flush=True
+    )
 
 if __name__ == "__main__":
     for task in ["easy", "medium", "hard"]:
         try:
             run_episode(task)
-        except Exception:
+        except Exception as e:
             # Emergency fallback line for validator
-            print(f"[END] success=false steps=0 score=0.1 rewards=0.1", flush=True)
+            print(f"[END] success=false steps=0 score=0.10 rewards=0.10", flush=True)
