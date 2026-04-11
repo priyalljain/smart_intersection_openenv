@@ -69,16 +69,15 @@ class TrafficControlEnv:
     async def step_async(self, action: TrafficAction) -> TrafficObservation:
         """
         Async step for OpenEnv server.
-        ⚠️ CRITICAL: Return ONLY the observation, NOT a tuple!
+        CRITICAL: Return ONLY the observation, NOT a tuple!
         OpenEnv will handle reward and done itself.
         """
         self.step_count += 1
         obs_dict, reward, done = self.sim.step(action.phase, dt=1.0)
-        obs = self._dict_to_observation(obs_dict)
         
         self.current_reward = reward
         self.is_done = done
-        
+        obs = self._dict_to_observation(obs_dict)
         return obs
 
     def state(self) -> Dict[str, Any]:
